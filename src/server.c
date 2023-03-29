@@ -1,18 +1,5 @@
-#include <arpa/inet.h>
-#include <assert.h>
-#include <ctype.h>
-#include <dirent.h>
-#include <errno.h>
-#include <fcntl.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <sys/epoll.h>
-#include <sys/sendfile.h>
-#include <sys/stat.h>
-#include <unistd.h>
-
 #include "server.h"
+#include "common.h"
 
 int init_listen_fd(uint16_t port) {
   int lfd, ret, opt = 1;
@@ -65,12 +52,20 @@ int epoll_run(int lfd) {
     int num = epoll_wait(epfd, evs, evs_size, -1);
     for (int i = 0; i < num; i++) {
       int fd = evs[i].data.fd;
+      struct HServerArgv *hs_argv =
+          (struct HServerArgv *)malloc(sizeof(struct HServerArgv));
+      *hs_argv = (struct HServerArgv){
+          .epfd = epfd,
+          .fd = fd,
+      };
       if (fd == lfd) {
         // Establish A New Connection
-        accept_client(lfd, epfd);
+        pthread_create(&hs_argv->pthread_id, NULL, callback_accpet_client,
+                       hs_argv);
       } else {
         // Reveive Data
-        recv_http_request(fd, epfd);
+        pthread_create(&hs_argv->pthread_id, NULL, callback_recv_http_request,
+                       hs_argv);
       }
     }
   }
@@ -168,7 +163,7 @@ int parse_request_line(const char *line, int cfd) {
 }
 
 int send_file(const char *path, int cfd) {
-  int fd = open(path, O_RDONLY), size;
+  int fd = open(path, O_RDONLY), size, ret;
   off_t offset = 0;
 
   assert(fd > 0);
@@ -177,7 +172,10 @@ int send_file(const char *path, int cfd) {
   lseek(fd, 0, SEEK_SET);
 
   while (offset < size) {
-    sendfile(cfd, fd, &offset, size);
+    if ((ret = sendfile(cfd, fd, &offset, size)) == -1 || errno != EAGAIN) {
+      close(fd);
+      return 0;
+    }
   }
 
   close(fd);
@@ -265,4 +263,18 @@ void url_decode(const char *from, char *to) {
     }
   }
   *to = '\0';
+}
+
+void *callback_accpet_client(void *argv) {
+  struct HServerArgv *hs_argv = argv;
+  accept_client(hs_argv->fd, hs_argv->epfd);
+  free(hs_argv);
+  return 0;
+}
+
+void *callback_recv_http_request(void *argv) {
+  struct HServerArgv *hs_argv = argv;
+  recv_http_request(hs_argv->fd, hs_argv->epfd);
+  free(hs_argv);
+  return 0;
 }
