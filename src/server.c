@@ -167,26 +167,18 @@ int parse_request_line(const char *line, int cfd) {
 
 int send_file(const char *path, int cfd) {
   int fd = open(path, O_RDONLY), size;
+  off_t offset = 0;
+
   assert(fd > 0);
+
   size = lseek(fd, 0, SEEK_END);
   lseek(fd, 0, SEEK_SET);
-#if 0
-  while (1) {
-    char buf[1024];
-    int len = read(fd, buf, sizeof buf);
-    if (len > 0) {
-      send(cfd, buf, len, 0);
-      usleep(10); // *important*
-    } else if (len == 0) {
-      break;
-    } else {
-      perror("read");
-    }
-  }
-#else
-  sendfile(cfd, fd, NULL, size);
-#endif
 
+  while (offset < size) {
+    sendfile(cfd, fd, &offset, size);
+  }
+
+  close(fd);
   return 0;
 }
 
