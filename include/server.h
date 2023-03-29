@@ -18,6 +18,6 @@ int send_dir(const char *path, int cfd);
 
 const char *get_file_type(const char *name);
 int hex_to_dec(char c);
-void url_decode(const char *str, char *buf);
+void url_decode(const char *from, char *to);
 
 #endif // _SERVER_H_

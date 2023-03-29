@@ -1,5 +1,6 @@
 #include <arpa/inet.h>
 #include <assert.h>
+#include <ctype.h>
 #include <dirent.h>
 #include <errno.h>
 #include <fcntl.h>
@@ -136,6 +137,7 @@ int parse_request_line(const char *line, int cfd) {
 
   // request line: get /xxx/1.jpg http/1.1
   sscanf(line, "%[^ ] %[^ ]", method, path);
+  url_decode(path, path);
   fprintf(stdout, "method: %s path: %s\n", method, path);
   if (strcasecmp(method, "get") != 0) {
     return -1;
@@ -241,4 +243,26 @@ int send_dir(const char *path, int cfd) {
   send(cfd, buf, strlen(buf), 0);
   free(namelist);
   return 0;
+}
+
+int hex_to_dec(char c) {
+  if (c >= '0' && c <= '9')
+    return c - '0';
+  if (c >= 'a' && c <= 'f')
+    return c - 'a' + 10;
+  if (c >= 'A' && c <= 'F')
+    return c - 'A' + 10;
+  return 0;
+}
+
+void url_decode(const char *from, char *to) {
+  for (; *from != '\0'; to++, from++) {
+    if (from[0] == '%' && isxdigit(from[1]) && isxdigit(from[2])) {
+      *to = hex_to_dec(from[1]) * 16 + hex_to_dec(from[2]);
+      from += 2;
+    } else {
+      *to = *from;
+    }
+  }
+  *to = '\0';
 }
